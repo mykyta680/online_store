@@ -1,0 +1,282 @@
+
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Online Store</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        h1 {
+            color: #2563eb;
+        }
+
+        form, .product {
+            background: white;
+            padding: 20px;
+            margin-bottom: 18px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px #00000010;
+        }
+
+        input, textarea, button {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 11px;
+            margin-top: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            font-size: 15px;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.85;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .delete {
+            background: #dc2626;
+        }
+
+        .edit {
+            background: #64748b;
+        }
+
+        .price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #15803d;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>My Online Store</h1>
+    <p>Магазин на Python, Flask і SQLite</p>
+
+    <h2>Додати товар</h2>
+
+    <form id="productForm">
+        <input id="name" placeholder="Назва товару" required>
+        <textarea id="description" placeholder="Опис товару"></textarea>
+        <input id="price" type="number" min="0" step="0.01"
+               placeholder="Ціна (€)" required>
+        <input id="stock" type="number" min="0" step="1"
+               placeholder="Кількість" value="0" required>
+        <button type="submit">Додати товар</button>
+    </form>
+
+    <h2>Наші товари</h2>
+    <p id="status">Завантаження товарів...</p>
+    <div id="products"></div>
+
+    <script>
+        const form = document.getElementById("productForm");
+        const productsBox = document.getElementById("products");
+        const statusBox = document.getElementById("status");
+
+        function showError(message) {
+            alert(message);
+        }
+
+        async function loadProducts() {
+            try {
+                const response = await fetch("/api/products");
+
+                if (!response.ok) {
+                    throw new Error("Не вдалося завантажити товари");
+                }
+
+                const products = await response.json();
+                productsBox.replaceChildren();
+
+                statusBox.textContent = products.length
+                    ? "Кількість товарів: " + products.length
+                    : "Поки що товарів немає. Додай перший товар!";
+
+                products.forEach(product => {
+                    const card = document.createElement("div");
+                    card.className = "product";
+
+                    const title = document.createElement("h3");
+                    title.textContent = product.name;
+
+                    const description = document.createElement("p");
+                    description.textContent = product.description || "";
+
+                    const price = document.createElement("p");
+                    price.className = "price";
+                    price.textContent =
+                        Number(product.price).toFixed(2) + " €";
+
+                    const stock = document.createElement("p");
+                    stock.textContent = "На складі: " + product.stock;
+
+                    const actions = document.createElement("div");
+                    actions.className = "actions";
+
+                    const editButton = document.createElement("button");
+                    editButton.className = "edit";
+                    editButton.textContent = "Редагувати";
+                    editButton.onclick = () => editProduct(product);
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.className = "delete";
+                    deleteButton.textContent = "Видалити";
+                    deleteButton.onclick = () =>
+                        deleteProduct(product.id);
+
+                    actions.append(editButton, deleteButton);
+                    card.append(title, description, price, stock, actions);
+                    productsBox.appendChild(card);
+                });
+            } catch (error) {
+                statusBox.textContent = error.message;
+            }
+        }
+
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+
+            const name = document.getElementById("name").value.trim();
+            const description =
+                document.getElementById("description").value;
+            const priceText = document.getElementById("price").value;
+            const stockText = document.getElementById("stock").value;
+
+            const price = Number(priceText);
+            const stock = Number(stockText);
+
+            if (!name || priceText === "" ||
+                !Number.isFinite(price) || price < 0 ||
+                stockText === "" || !Number.isInteger(stock) ||
+                stock < 0) {
+                showError("Перевір назву, ціну та кількість.");
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/products", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        name, description, price, stock
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Помилка");
+                }
+
+                form.reset();
+                document.getElementById("stock").value = 0;
+                await loadProducts();
+            } catch (error) {
+                showError(error.message);
+            }
+        });
+
+        async function editProduct(product) {
+            const name = prompt("Назва товару:", product.name);
+            if (name === null) return;
+
+            const priceText = prompt("Ціна:", product.price);
+            if (priceText === null) return;
+
+            const stockText = prompt("Кількість:", product.stock);
+            if (stockText === null) return;
+
+            const description = prompt(
+                "Опис:", product.description || ""
+            );
+            if (description === null) return;
+
+            const price = Number(priceText);
+            const stock = Number(stockText);
+
+            if (!name.trim() || priceText.trim() === "" ||
+                !Number.isFinite(price) || price < 0 ||
+                stockText.trim() === "" ||
+                !Number.isInteger(stock) || stock < 0) {
+                showError("Перевір введені дані.");
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    "/api/products/" + product.id,
+                    {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            name: name.trim(),
+                            description,
+                            price,
+                            stock
+                        })
+                    }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Помилка");
+                }
+
+                await loadProducts();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function deleteProduct(id) {
+            if (!confirm("Точно видалити товар?")) return;
+
+            try {
+                const response = await fetch(
+                    "/api/products/" + id,
+                    { method: "DELETE" }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Помилка");
+                }
+
+                await loadProducts();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        loadProducts();
+    </script>
+</body>
+</html>
